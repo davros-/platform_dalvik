@@ -312,8 +312,8 @@ static mspace createMspace(void* begin, size_t morecoreStart, size_t startingSiz
     if (msp != NULL) {
         // Do not allow morecore requests to succeed beyond the starting size of the heap.
         mspace_set_footprint_limit(msp, startingSize);
-//    } else {
-//        ALOGE("create_mspace_with_base failed %s", strerror(errno));
+    } else {
+        ALOGE("create_mspace_with_base failed %s", strerror(errno));
     }
     return msp;
 }
@@ -331,8 +331,8 @@ void* dvmHeapSourceMorecore(void* mspace, intptr_t increment)
         }
     }
     if (heap == NULL) {
-//        ALOGE("Failed to find heap for mspace %p", mspace);
-//        dvmAbort();
+        ALOGE("Failed to find heap for mspace %p", mspace);
+        dvmAbort();
     }
     char* original_brk = heap->brk;
     if (increment != 0) {
@@ -388,8 +388,8 @@ static bool addNewHeap(HeapSource *hs)
 
     assert(hs != NULL);
     if (hs->numHeaps >= HEAP_SOURCE_MAX_HEAP_COUNT) {
-//        ALOGE("Attempt to create too many heaps (%zd >= %zd)",
- //               hs->numHeaps, HEAP_SOURCE_MAX_HEAP_COUNT);
+        ALOGE("Attempt to create too many heaps (%zd >= %zd)",
+                hs->numHeaps, HEAP_SOURCE_MAX_HEAP_COUNT);
         dvmAbort();
         return false;
     }
@@ -552,8 +552,8 @@ GcHeap* dvmHeapSourceStartup(size_t startSize, size_t maximumSize,
     assert(gHs == NULL);
 
     if (!(startSize <= growthLimit && growthLimit <= maximumSize)) {
-//        ALOGE("Bad heap size parameters (start=%zd, max=%zd, limit=%zd)",
-//             startSize, maximumSize, growthLimit);
+        ALOGE("Bad heap size parameters (start=%zd, max=%zd, limit=%zd)",
+             startSize, maximumSize, growthLimit);
         return NULL;
     }
 
@@ -577,13 +577,13 @@ GcHeap* dvmHeapSourceStartup(size_t startSize, size_t maximumSize,
 
     gcHeap = (GcHeap *)calloc(1, sizeof(*gcHeap));
     if (gcHeap == NULL) {
-//        LOGE_HEAP("Can't allocate heap descriptor");
+        LOGE_HEAP("Can't allocate heap descriptor");
         goto fail;
     }
 
     hs = (HeapSource *)calloc(1, sizeof(*hs));
     if (hs == NULL) {
-//        LOGE_HEAP("Can't allocate heap source");
+        LOGE_HEAP("Can't allocate heap source");
         free(gcHeap);
         goto fail;
     }
@@ -612,20 +612,20 @@ GcHeap* dvmHeapSourceStartup(size_t startSize, size_t maximumSize,
     }
 
     if (!addInitialHeap(hs, msp, growthLimit)) {
-//        LOGE_HEAP("Can't add initial heap");
+        LOGE_HEAP("Can't add initial heap");
         goto fail;
     }
     if (!dvmHeapBitmapInit(&hs->liveBits, base, length, "dalvik-bitmap-1")) {
-//        LOGE_HEAP("Can't create liveBits");
+        LOGE_HEAP("Can't create liveBits");
         goto fail;
     }
     if (!dvmHeapBitmapInit(&hs->markBits, base, length, "dalvik-bitmap-2")) {
-//        LOGE_HEAP("Can't create markBits");
+        LOGE_HEAP("Can't create markBits");
         dvmHeapBitmapDelete(&hs->liveBits);
         goto fail;
     }
     if (!allocMarkStack(&gcHeap->markContext.stack, hs->maximumSize)) {
-//        ALOGE("Can't create markStack");
+        ALOGE("Can't create markStack");
         dvmHeapBitmapDelete(&hs->markBits);
         dvmHeapBitmapDelete(&hs->liveBits);
         goto fail;
@@ -675,7 +675,7 @@ bool dvmHeapSourceStartupBeforeFork()
         /* Create a new heap for post-fork zygote allocations.  We only
          * try once, even if it fails.
          */
-//        ALOGV("Splitting out new zygote heap");
+        ALOGV("Splitting out new zygote heap");
         gDvm.newZygoteHeapAllocated = true;
         return addNewHeap(hs);
     }
@@ -880,8 +880,8 @@ void* dvmHeapSourceAlloc(size_t n)
          * This allocation would push us over the soft limit; act as
          * if the heap is full.
          */
-//        LOGV_HEAP("softLimit of %zd.%03zdMB hit for %zd-byte allocation",
-//                  FRACTIONAL_MB(hs->softLimit), n);
+        LOGV_HEAP("softLimit of %zd.%03zdMB hit for %zd-byte allocation",
+                  FRACTIONAL_MB(hs->softLimit), n);
         return NULL;
     }
     void* ptr = mspace_calloc(heap->msp, 1, n);
@@ -1200,9 +1200,9 @@ static void setIdealFootprint(size_t max)
     HeapSource *hs = gHs;
     size_t maximumSize = getMaximumSize(hs);
     if (max > maximumSize) {
-//       LOGI_HEAP("Clamp target GC heap from %zd.%03zdMB to %u.%03uMB",
-//                FRACTIONAL_MB(max),
-//                FRACTIONAL_MB(maximumSize));
+        LOGI_HEAP("Clamp target GC heap from %zd.%03zdMB to %u.%03uMB",
+                FRACTIONAL_MB(max),
+                FRACTIONAL_MB(maximumSize));
         max = maximumSize;
     }
 
@@ -1266,8 +1266,8 @@ void dvmSetTargetHeapUtilization(float newTarget)
 
     hs->targetUtilization =
             (size_t)(newTarget * (float)HEAP_UTILIZATION_MAX);
-//    ALOGV("Set heap target utilization to %zd/%d (%f)",
-//            hs->targetUtilization, HEAP_UTILIZATION_MAX, newTarget);
+    ALOGV("Set heap target utilization to %zd/%d (%f)",
+            hs->targetUtilization, HEAP_UTILIZATION_MAX, newTarget);
 }
 
 /*
@@ -1425,8 +1425,8 @@ static void trimHeaps()
     size_t nativeBytes = 0;
     dlmalloc_inspect_all(releasePagesInRange, &nativeBytes);
 
-//    LOGD_HEAP("madvised %zd (GC) + %zd (native) = %zd total bytes",
-//            heapBytes, nativeBytes, heapBytes + nativeBytes);
+    LOGD_HEAP("madvised %zd (GC) + %zd (native) = %zd total bytes",
+            heapBytes, nativeBytes, heapBytes + nativeBytes);
 }
 
 /*

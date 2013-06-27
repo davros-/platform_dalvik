@@ -1281,7 +1281,6 @@ bool dvmCreateInterpThread(Object* threadObj, int reqStackSize)
             "thread has already been started");
         freeThread(newThread);
         dvmReleaseTrackedAlloc(vmThreadObj, NULL);
-        return false;
     }
 
     /*
@@ -1312,13 +1311,11 @@ bool dvmCreateInterpThread(Object* threadObj, int reqStackSize)
          * resource limits.  VirtualMachineError is probably too severe,
          * so use OutOfMemoryError.
          */
-        ALOGE("pthread_create (stack size %d bytes) failed: %s", stackSize, strerror(cc));
+        ALOGE("Thread creation failed (err=%s)", strerror(errno));
 
         dvmSetFieldObject(threadObj, gDvm.offJavaLangThread_vmThread, NULL);
 
-        dvmThrowExceptionFmt(gDvm.exOutOfMemoryError,
-                             "pthread_create (stack size %d bytes) failed: %s",
-                             stackSize, strerror(cc));
+        dvmThrowOutOfMemoryError("thread creation failed");
         goto fail;
     }
 
@@ -1661,7 +1658,7 @@ bool dvmCreateInternalThread(pthread_t* pHandle, const char* name,
     int cc = pthread_create(pHandle, &threadAttr, internalThreadStart, pArgs);
     pthread_attr_destroy(&threadAttr);
     if (cc != 0) {
-        ALOGE("internal thread creation failed: %s", strerror(cc));
+        ALOGE("internal thread creation failed");
         free(pArgs->name);
         free(pArgs);
         return false;
@@ -2148,14 +2145,17 @@ void dvmDetachCurrentThread()
         gDvm.nonDaemonThreadCount--;        // guarded by thread list lock
 
         if (gDvm.nonDaemonThreadCount == 0) {
+            int cc;
+
             ALOGV("threadid=%d: last non-daemon thread", self->threadId);
             //dvmDumpAllThreads(false);
             // cond var guarded by threadListLock, which we already hold
-            int cc = pthread_cond_signal(&gDvm.vmExitCond);
-            if (cc != 0) {
-                ALOGE("pthread_cond_signal(&gDvm.vmExitCond) failed: %s", strerror(cc));
-                dvmAbort();
-            }
+            cc = pthread_cond_signal(&gDvm.vmExitCond);
+            assert(cc == 0);
+#ifdef NDEBUG
+            // not used -> variable defined but not used warning
+            (void)cc;
+#endif
         }
     }
 
@@ -2633,6 +2633,7 @@ void dvmResumeAllThreads(SuspendCause why)
 {
     Thread* self = dvmThreadSelf();
     Thread* thread;
+    int cc;
 
     lockThreadSuspend("res-all", why);  /* one suspend/resume at a time */
     LOG_THREAD("threadid=%d: ResumeAll starting", self->threadId);
@@ -2710,11 +2711,12 @@ void dvmResumeAllThreads(SuspendCause why)
      * which may choose to wake up.  No need to wait for them.
      */
     lockThreadSuspendCount();
-    int cc = pthread_cond_broadcast(&gDvm.threadSuspendCountCond);
-    if (cc != 0) {
-        ALOGE("pthread_cond_broadcast(&gDvm.threadSuspendCountCond) failed: %s", strerror(cc));
-        dvmAbort();
-    }
+    cc = pthread_cond_broadcast(&gDvm.threadSuspendCountCond);
+    assert(cc == 0);
+#ifdef NDEBUG
+    // not used -> variable defined but not used warning
+    (void)cc;
+#endif
     unlockThreadSuspendCount();
 
     LOG_THREAD("threadid=%d: ResumeAll complete", self->threadId);
@@ -2728,6 +2730,7 @@ void dvmUndoDebuggerSuspensions()
 {
     Thread* self = dvmThreadSelf();
     Thread* thread;
+    int cc;
 
     lockThreadSuspend("undo", SUSPEND_FOR_DEBUG);
     LOG_THREAD("threadid=%d: UndoDebuggerSusp starting", self->threadId);
@@ -2761,11 +2764,12 @@ void dvmUndoDebuggerSuspensions()
      * which may choose to wake up.  No need to wait for them.
      */
     lockThreadSuspendCount();
-    int cc = pthread_cond_broadcast(&gDvm.threadSuspendCountCond);
-    if (cc != 0) {
-        ALOGE("pthread_cond_broadcast(&gDvm.threadSuspendCountCond) failed: %s", strerror(cc));
-        dvmAbort();
-    }
+    cc = pthread_cond_broadcast(&gDvm.threadSuspendCountCond);
+    assert(cc == 0);
+#ifdef NDEBUG
+    // not used -> variable defined but not used warning
+    (void)cc;
+#endif
     unlockThreadSuspendCount();
 
     unlockThreadSuspend();
@@ -3506,12 +3510,13 @@ void dvmDumpAllThreadsEx(const DebugOutputTarget* target, bool grabLock)
     snprintf(path, sizeof(path), "/proc/%d/task", getpid());
 
     DIR* d = opendir(path);
-    if (d != NULL) {
-        dirent* entry = NULL;
+    if (d) {
+        dirent de;
+        dirent* result;
         bool first = true;
-        while ((entry = readdir(d)) != NULL) {
+        while (!readdir_r(d, &de, &result) && result) {
             char* end;
-            pid_t tid = strtol(entry->d_name, &end, 10);
+            pid_t tid = strtol(de.d_name, &end, 10);
             if (!*end && !isDalvikThread(tid)) {
                 if (first) {
                     dvmPrintDebugMessage(target, "NATIVE THREADS:\n");
